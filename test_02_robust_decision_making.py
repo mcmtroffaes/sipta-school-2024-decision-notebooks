@@ -223,8 +223,6 @@ def is_rbayes_maximal_2(
     gambles: Sequence[Gamble],
 ) -> Sequence[bool]:
     xss = [[expectation(pmf, gamble) for pmf in credal_set] for gamble in gambles]
-    # make edits here to improve this function by sorting xss appropriately...
-    # you can use the Python function sorted(..., key=...)
     return is_maximal_2(pointwise_dominates, xss)
 
 
