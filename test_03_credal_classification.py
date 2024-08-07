@@ -1062,14 +1062,14 @@ def naive_bayes_prob(model: Model, test_row: Sequence[int], c: int) -> float:
     return pc * prod(pacs)
 
 
-def naive_bayes_test(model: Model, test_row: Sequence[int]) -> Sequence[float | None]:
+def naive_bayes_outcome(model: Model, test_row: Sequence[int]) -> Sequence[float | None]:
     probs = {c: naive_bayes_prob(model, test_row, c) for c in model.nc}
     c_test = test_row[model.c_column]
     max_prob = max(probs.values())
     return [1 if probs[c_test] + TOL >= max_prob else 0]
 
 
-def test_summary(outcomes: Sequence[Sequence[float | None]]) -> Sequence[float | None]:
+def mean_outcome(outcomes: Sequence[Sequence[float | None]]) -> Sequence[float | None]:
     def _mean(xs: Sequence[float | None]) -> float | None:
         xs2 = [x for x in xs if x is not None]
         return mean(xs2) if xs2 else None
@@ -1077,16 +1077,13 @@ def test_summary(outcomes: Sequence[Sequence[float | None]]) -> Sequence[float |
     return list(map(_mean, zip(*outcomes)))
 
 
-test_summary.__test__ = False  # type: ignore
-
-
-def test_test_summary() -> None:
-    assert test_summary(
-        [naive_bayes_test(cancer_model, row) for row in cancer_data]
+def test_mean_outcome() -> None:
+    assert mean_outcome(
+        [naive_bayes_outcome(cancer_model, row) for row in cancer_data]
     ) == [pytest.approx(0.8385, abs=0.0001)]
 
 
-def test_kfcv(
+def kfcv_outcomes(
     # test(model, test_row) -> sequence of accuracy measures
     test: Callable[[Model, Sequence[int]], Sequence[float | None]],
     folds: int,
@@ -1105,13 +1102,10 @@ def test_kfcv(
     return outcomes
 
 
-test_kfcv.__test__ = False  # type: ignore
-
-
-def test_test_kfcv() -> None:
-    assert test_summary(
-        test_kfcv(
-            test=naive_bayes_test,
+def test_kfcv_outcomes() -> None:
+    assert mean_outcome(
+        kfcv_outcomes(
+            test=naive_bayes_outcome,
             folds=10,
             data=cancer_data,
             c_column=COL_SEVERITY,
@@ -1134,7 +1128,7 @@ def naive_credal_prob(
     return pc[0] * prod(pac[0] for pac in pacs), pc[1] * prod(pac[1] for pac in pacs)
 
 
-def naive_credal_test(model: Model, test_row: Sequence[int]) -> Sequence[float | None]:
+def naive_credal_outcome(model: Model, test_row: Sequence[int]) -> Sequence[float | None]:
     probs = {c: naive_credal_prob(model, test_row, c) for c in model.nc}
     c_test = test_row[model.c_column]
     max_lowprob = max(low for low, upp in probs.values())
@@ -1149,10 +1143,10 @@ def naive_credal_test(model: Model, test_row: Sequence[int]) -> Sequence[float |
     ]
 
 
-def test_naive_credal_test() -> None:
-    assert test_summary(
-        test_kfcv(
-            test=naive_credal_test,
+def test_naive_credal_outcome() -> None:
+    assert mean_outcome(
+        kfcv_outcomes(
+            test=naive_credal_outcome,
             folds=10,
             data=cancer_data,
             c_column=COL_SEVERITY,
@@ -1173,7 +1167,7 @@ def is_maximal(
     return [is_not_dominated(c) for c in cs]
 
 
-def naive_credal_test_2(
+def naive_credal_outcome_2(
     model: Model, test_row: Sequence[int]
 ) -> Sequence[float | None]:
 
