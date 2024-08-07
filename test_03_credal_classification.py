@@ -1062,7 +1062,9 @@ def naive_bayes_prob(model: Model, test_row: Sequence[int], c: int) -> float:
     return pc * prod(pacs)
 
 
-def naive_bayes_outcome(model: Model, test_row: Sequence[int]) -> Sequence[float | None]:
+def naive_bayes_outcome(
+    model: Model, test_row: Sequence[int]
+) -> Sequence[float | None]:
     probs = {c: naive_bayes_prob(model, test_row, c) for c in model.nc}
     c_test = test_row[model.c_column]
     max_prob = max(probs.values())
@@ -1128,7 +1130,9 @@ def naive_credal_prob(
     return pc[0] * prod(pac[0] for pac in pacs), pc[1] * prod(pac[1] for pac in pacs)
 
 
-def naive_credal_outcome(model: Model, test_row: Sequence[int]) -> Sequence[float | None]:
+def naive_credal_outcome(
+    model: Model, test_row: Sequence[int]
+) -> Sequence[float | None]:
     probs = {c: naive_credal_prob(model, test_row, c) for c in model.nc}
     c_test = test_row[model.c_column]
     max_lowprob = max(low for low, upp in probs.values())
@@ -1161,10 +1165,10 @@ def is_maximal(
     dominates: Callable[[int, int], bool],  # compares two classes
     cs: Sequence[int],  # sequence classes
 ) -> Sequence[bool]:
-    def is_not_dominated(c: int) -> bool:
-        return all(not dominates(c_, c) for c_ in cs)
+    def is_not_dominated(c1: int) -> bool:
+        return all(not dominates(c2, c1) for c2 in cs)
 
-    return [is_not_dominated(c) for c in cs]
+    return [is_not_dominated(c1) for c1 in cs]
 
 
 def naive_credal_outcome_2(
@@ -1172,11 +1176,25 @@ def naive_credal_outcome_2(
 ) -> Sequence[float | None]:
 
     def dominates(c1: int, c2: int) -> bool:
-        raise NotImplementedError  # to do, use zaffalon's formula
+        return all(
+            (
+                ((model.nc[c2] + model.s * t) / (model.nc[c1] + model.s * (1 - t)))
+                ** (len(model.a_columns) - 1)
+            )
+            * prod(
+                model.nac[a_column][test_row[a_column], c1]
+                / (model.nac[a_column][test_row[a_column], c2] + model.s * t)
+                for a_column in model.a_columns
+            )
+            > 1 + TOL
+            for t in [0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99]
+        )
 
-    is_max_cs = is_maximal(dominates, list(model.nc))
+    cs = list(model.nc)
+    is_max_cs = is_maximal(dominates, cs)
     set_size = sum(is_max_cs)
-    correct = ...  # to do
+    c_test = test_row[model.c_column]
+    correct = is_max_cs[cs.index(c_test)]
     return [
         1 if correct else 0,  # accuracy
         (1 if correct else 0) if set_size == 1 else None,  # single accuracy
@@ -1184,3 +1202,39 @@ def naive_credal_outcome_2(
         set_size if set_size != 1 else None,  # indeterminate set size
         1 if set_size == 1 else 0,  # determinacy
     ]
+
+
+def test_naive_credal_outcome_2() -> None:
+    assert mean_outcome(
+        kfcv_outcomes(
+            test=naive_credal_outcome_2,
+            folds=10,
+            data=cancer_data,
+            c_column=COL_SEVERITY,
+            a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
+        )
+    ) == pytest.approx(
+        # same as with naive_credal_outcome! this is due to large dataset
+        [0.8409638554216867, 0.8384332925336597, 1, 2, 0.9843373493975903]
+    )
+
+
+def test_naive_credal_outcome_3() -> None:
+    assert mean_outcome(
+        kfcv_outcomes(
+            test=naive_credal_outcome,
+            folds=10,
+            data=cancer_data[:50],
+            c_column=COL_SEVERITY,
+            a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
+        )
+    ) == pytest.approx([0.88, 0.8536585365853658, 1, 2, 0.82])
+    assert mean_outcome(
+        kfcv_outcomes(
+            test=naive_credal_outcome_2,
+            folds=10,
+            data=cancer_data[:50],
+            c_column=COL_SEVERITY,
+            a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
+        )
+    ) == pytest.approx([0.86, 0.8409090909090909, 1, 2, 0.88])
