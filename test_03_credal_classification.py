@@ -1,7 +1,11 @@
 import csv
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from math import prod
+from statistics import mean
+
+import pytest
 
 TOL = 1e-6
 
@@ -1040,3 +1044,149 @@ cancer_model = train_model(
     c_column=COL_SEVERITY,
     a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
 )
+
+
+def test_cancer_model() -> None:
+    assert cancer_model.nc[0] == 427
+    assert cancer_model.nc[1] == 403
+    assert cancer_model.nac[COL_BIRADS][5, 1] == 286
+    assert cancer_model.nac[COL_AGE][75, 0] == 10
+
+
+def naive_bayes_prob(model: Model, test_row: Sequence[int], c: int) -> float:
+    pc = model.nc[c] / model.n  # p(c)=n(c)/N
+    pacs = [  # p(a|c)=n(a_i,c)/n(c)
+        model.nac[a_column][test_row[a_column], c] / model.nc[c]
+        for a_column in model.a_columns
+    ]
+    return pc * prod(pacs)
+
+
+def naive_bayes_test(model: Model, test_row: Sequence[int]) -> Sequence[float | None]:
+    probs = {c: naive_bayes_prob(model, test_row, c) for c in model.nc}
+    c_test = test_row[model.c_column]
+    max_prob = max(probs.values())
+    return [1 if probs[c_test] + TOL >= max_prob else 0]
+
+
+def test_summary(outcomes: Sequence[Sequence[float | None]]) -> Sequence[float | None]:
+    def _mean(xs: Sequence[float | None]) -> float | None:
+        xs2 = [x for x in xs if x is not None]
+        return mean(xs2) if xs2 else None
+
+    return list(map(_mean, zip(*outcomes)))
+
+
+test_summary.__test__ = False  # type: ignore
+
+
+def test_test_summary() -> None:
+    assert test_summary(
+        [naive_bayes_test(cancer_model, row) for row in cancer_data]
+    ) == [pytest.approx(0.8385, abs=0.0001)]
+
+
+def test_kfcv(
+    # test(model, test_row) -> sequence of accuracy measures
+    test: Callable[[Model, Sequence[int]], Sequence[float | None]],
+    folds: int,
+    data: Sequence[Sequence[int]],
+    c_column: int,
+    a_columns: Sequence[int],
+    s: float = 2.0,
+) -> Sequence[Sequence[float | None]]:
+    outcomes = []
+    for fold in range(folds):
+        test_data = data[fold::folds]
+        test_indices = range(fold, len(data), folds)
+        train_data = [row for i, row in enumerate(data) if i not in test_indices]
+        model = train_model(train_data, c_column, a_columns, s)
+        outcomes += [test(model, row) for row in test_data]
+    return outcomes
+
+
+test_kfcv.__test__ = False  # type: ignore
+
+
+def test_test_kfcv() -> None:
+    assert test_summary(
+        test_kfcv(
+            test=naive_bayes_test,
+            folds=10,
+            data=cancer_data,
+            c_column=COL_SEVERITY,
+            a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
+        )
+    ) == [pytest.approx(0.8337, abs=0.0001)]
+
+
+def naive_credal_prob(
+    model: Model, test_row: Sequence[int], c: int
+) -> tuple[float, float]:
+    def interval(a: float, b: float) -> tuple[float, float]:
+        return a / (b + model.s), (a + model.s) / (b + model.s)
+
+    pc = interval(model.nc[c], model.n)
+    pacs = [
+        interval(model.nac[a_column][test_row[a_column], c], model.nc[c])
+        for a_column in model.a_columns
+    ]
+    return pc[0] * prod(pac[0] for pac in pacs), pc[1] * prod(pac[1] for pac in pacs)
+
+
+def naive_credal_test(model: Model, test_row: Sequence[int]) -> Sequence[float | None]:
+    probs = {c: naive_credal_prob(model, test_row, c) for c in model.nc}
+    c_test = test_row[model.c_column]
+    max_lowprob = max(low for low, upp in probs.values())
+    set_size = sum(1 if probs[c][1] + TOL >= max_lowprob else 0 for c in model.nc)
+    correct = probs[c_test][1] + TOL >= max_lowprob
+    return [
+        1 if correct else 0,  # accuracy
+        (1 if correct else 0) if set_size == 1 else None,  # single accuracy
+        (1 if correct else 0) if set_size != 1 else None,  # set accuracy
+        set_size if set_size != 1 else None,  # indeterminate set size
+        1 if set_size == 1 else 0,  # determinacy
+    ]
+
+
+def test_naive_credal_test() -> None:
+    assert test_summary(
+        test_kfcv(
+            test=naive_credal_test,
+            folds=10,
+            data=cancer_data,
+            c_column=COL_SEVERITY,
+            a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
+        )
+    ) == pytest.approx(
+        [0.8409638554216867, 0.8384332925336597, 1, 2, 0.9843373493975903]
+    )
+
+
+def is_maximal(
+    dominates: Callable[[int, int], bool],  # compares two classes
+    cs: Sequence[int],  # sequence classes
+) -> Sequence[bool]:
+    def is_not_dominated(c: int) -> bool:
+        return all(not dominates(c_, c) for c_ in cs)
+
+    return [is_not_dominated(c) for c in cs]
+
+
+def naive_credal_test_2(
+    model: Model, test_row: Sequence[int]
+) -> Sequence[float | None]:
+
+    def dominates(c1: int, c2: int) -> bool:
+        raise NotImplementedError  # to do, use zaffalon's formula
+
+    is_max_cs = is_maximal(dominates, list(model.nc))
+    set_size = sum(is_max_cs)
+    correct = ...  # to do
+    return [
+        1 if correct else 0,  # accuracy
+        (1 if correct else 0) if set_size == 1 else None,  # single accuracy
+        (1 if correct else 0) if set_size != 1 else None,  # set accuracy
+        set_size if set_size != 1 else None,  # indeterminate set size
+        1 if set_size == 1 else 0,  # determinacy
+    ]
