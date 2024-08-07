@@ -149,8 +149,22 @@ def is_interval_maximal(
     return is_maximal(interval_dominates, xss)
 
 
+def is_interval_maximal_2(
+        credal_set: Sequence[PMF],
+        gambles: Sequence[Gamble],
+) -> Sequence[bool]:
+    xss = [[expectation(pmf, gamble) for pmf in credal_set] for gamble in gambles]
+    maxmin = max(min(xs) for xs in xss)
+    maxs = [max(xs) for xs in xss]
+    return [max_ + TOL >= maxmin for max_ in maxs]
+
+
 def test_is_interval_maximal() -> None:
     assert is_interval_maximal(
+        credal_set=[[0.5, 0.5], [0.8, 0.2]],
+        gambles=[[440, 260], [420, 300], [370, 370]],
+    ) == [True, True, True]
+    assert is_interval_maximal_2(
         credal_set=[[0.5, 0.5], [0.8, 0.2]],
         gambles=[[440, 260], [420, 300], [370, 370]],
     ) == [True, True, True]
@@ -239,6 +253,7 @@ def test_extra() -> None:
     assert is_gamma_maximax(credal_set, gambles) == [True, False, False, False]
     assert is_hurwicz(0.5, credal_set, gambles) == [True, False, False, False]
     assert is_interval_maximal(credal_set, gambles) == [True, True, False, True]
+    assert is_interval_maximal_2(credal_set, gambles) == [True, True, False, True]
     assert is_rbayes_maximal(credal_set, gambles) == [True, True, False, True]
     assert is_rbayes_admissible(credal_set, gambles) == [True, False, False, True]
 
@@ -259,4 +274,5 @@ def test_extra_2() -> None:
     assert is_gamma_maximax(pmfs, rvars) == [False, True, False, False, False, False]
     assert is_rbayes_maximal(pmfs, rvars) == [True, True, True, False, True, False]
     assert is_interval_maximal(pmfs, rvars) == [True, True, True, False, True, True]
+    assert is_interval_maximal_2(pmfs, rvars) == [True, True, True, False, True, True]
     assert is_rbayes_admissible(pmfs, rvars) == [True, True, True, False, False, False]
