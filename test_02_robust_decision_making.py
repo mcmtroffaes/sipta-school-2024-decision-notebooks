@@ -11,6 +11,16 @@ def expectation(pmf: PMF, gamble: Gamble) -> float:
     return sum(p * g for p, g in zip(pmf, gamble))
 
 
+def test_expectation() -> None:
+    credal_set = [[0.5, 0.5], [0.8, 0.2]]
+    gambles = [[440, 260], [420, 300], [370, 370]]
+    assert [[expectation(pmf, gamble) for pmf in credal_set] for gamble in gambles] == [
+        pytest.approx([350, 404]),
+        pytest.approx([360, 396]),
+        pytest.approx([370, 370]),
+    ]
+
+
 def transform_expectations(
     transform: Callable[[Sequence[float]], float],  # sequence of expectations -> float
     credal_set: Sequence[PMF],
