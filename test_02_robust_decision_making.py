@@ -241,3 +241,22 @@ def test_extra() -> None:
     assert is_interval_maximal(credal_set, gambles) == [True, True, False, True]
     assert is_rbayes_maximal(credal_set, gambles) == [True, True, False, True]
     assert is_rbayes_admissible(credal_set, gambles) == [True, False, False, True]
+
+
+def test_extra_2() -> None:
+    # from the 2007 paper
+    # need convex combination for E-admissibility to be the same as robust Bayes
+    pmfs: Sequence[Sequence[float]] = [[0.28, 0.72], [0.5, 0.5], [0.7, 0.3]]
+    rvars: Sequence[Sequence[float]] = [
+        [4, 0],
+        [0, 4],
+        [3, 2],
+        [0.5, 3],
+        [2.35, 2.35],
+        [4.1, -0.3],
+    ]
+    assert is_gamma_maximin(pmfs, rvars) == [False, False, False, False, True, False]
+    assert is_gamma_maximax(pmfs, rvars) == [False, True, False, False, False, False]
+    assert is_rbayes_maximal(pmfs, rvars) == [True, True, True, False, True, False]
+    assert is_interval_maximal(pmfs, rvars) == [True, True, True, False, True, True]
+    assert is_rbayes_admissible(pmfs, rvars) == [True, True, True, False, False, False]
