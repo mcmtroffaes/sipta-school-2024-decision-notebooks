@@ -215,3 +215,22 @@ def combine(
 
 def test_combine() -> None:
     assert combine(0.5, [0.5, 0.5], [0.8, 0.2]) == pytest.approx([0.65, 0.35])
+
+
+def test_extra() -> None:
+    gambles = [[3, 9, 2], [4, 4, 4], [0, 3, 6], [6, 2, 1]]
+    credal_set = [[0.4, 0.5, 0.1], [0.1, 0.8, 0.1], [0.6, 0.2, 0.2]]
+    assert [
+        lower_expectation(credal_set, gamble) for gamble in gambles
+    ] == pytest.approx([4, 4, 1.8, 2.3])
+    assert [
+        upper_expectation(credal_set, gamble) for gamble in gambles
+    ] == pytest.approx([7.7, 4, 3, 4.2])
+    assert [
+        hurwicz_expectation(0.5, credal_set, gamble) for gamble in gambles
+    ] == pytest.approx([5.85, 4, 2.4, 3.25])
+    assert is_gamma_maximin(credal_set, gambles) == [True, True, False, False]
+    assert is_gamma_maximax(credal_set, gambles) == [True, False, False, False]
+    assert is_hurwicz(0.5, credal_set, gambles) == [True, False, False, False]
+    assert is_rbayes_maximal(credal_set, gambles) == [True, True, False, True]
+    assert is_interval_maximal(credal_set, gambles) == [True, True, False, True]
