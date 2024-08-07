@@ -1238,3 +1238,28 @@ def test_naive_credal_outcome_3() -> None:
             a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
         )
     ) == pytest.approx([0.86, 0.8409090909090909, 1, 2, 0.88])
+
+
+def test_naive_credal_outcome_4() -> None:
+    assert mean_outcome(
+        kfcv_outcomes(
+            test=naive_credal_outcome,
+            folds=10,
+            data=cancer_data[:50],
+            c_column=COL_BIRADS,
+            a_columns=[COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
+        )
+    ) == pytest.approx(
+        [0.96, 0.9230769230769231, 0.972972972972973, 2.27027027027027, 0.26]
+    )
+    assert mean_outcome(
+        kfcv_outcomes(
+            test=naive_credal_outcome_2,
+            folds=10,
+            data=cancer_data[:50],
+            c_column=COL_BIRADS,
+            a_columns=[COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
+        )
+    ) == pytest.approx(
+        [0.96, 0.9473684210526315, 0.967741935483871, 2.2903225806451615, 0.38]
+    )
