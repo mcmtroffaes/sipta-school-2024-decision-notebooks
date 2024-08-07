@@ -12,12 +12,12 @@ def expectation(pmf: PMF, gamble: Gamble) -> float:
 
 
 def test_expectation() -> None:
-    credal_set = [[0.5, 0.5], [0.8, 0.2]]
+    credal_set = [[0.5, 0.5], [0.8, 0.2], [0.65, 0.35]]
     gambles = [[440, 260], [420, 300], [370, 370]]
     assert [[expectation(pmf, gamble) for pmf in credal_set] for gamble in gambles] == [
-        pytest.approx([350, 404]),
-        pytest.approx([360, 396]),
-        pytest.approx([370, 370]),
+        pytest.approx([350, 404, 377]),
+        pytest.approx([360, 396, 378]),
+        pytest.approx([370, 370, 370]),
     ]
 
 
