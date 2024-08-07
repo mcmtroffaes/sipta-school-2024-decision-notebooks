@@ -177,3 +177,41 @@ def test_is_rbayes_maximal() -> None:
         credal_set=[[0.5, 0.5], [0.8, 0.2]],
         gambles=[[440, 260], [420, 300], [370, 370]],
     ) == [True, True, True]
+
+
+def is_rbayes_admissible(
+    credal_set: Sequence[PMF],
+    gambles: Sequence[Gamble],
+) -> Sequence[bool]:
+    def arg_max(pmf: PMF) -> Sequence[bool]:
+        xs = [expectation(pmf, gamble) for gamble in gambles]
+        max_xs = max(xs)
+        return [x + TOL >= max_xs for x in xs]
+
+    def union(bss: Sequence[Sequence[bool]]) -> Sequence[bool]:
+        return [any(bs) for bs in zip(*bss)]
+
+    return union([arg_max(pmf) for pmf in credal_set])
+
+
+def test_is_rbayes_admissible() -> None:
+    assert is_rbayes_admissible(
+        credal_set=[[0.5, 0.5], [0.8, 0.2]],
+        gambles=[[440, 260], [420, 300], [370, 370]],
+    ) == [True, False, True]
+    assert is_rbayes_admissible(
+        credal_set=[[0.5, 0.5], [0.65, 0.35], [0.8, 0.2]],
+        gambles=[[440, 260], [420, 300], [370, 370]],
+    ) == [True, True, True]
+
+
+def combine(
+    alpha: float,
+    xs: Sequence[float],
+    ys: Sequence[float],
+) -> Sequence[float]:
+    return [(1 - alpha) * x + alpha * y for x, y in zip(xs, ys)]
+
+
+def test_combine() -> None:
+    assert combine(0.5, [0.5, 0.5], [0.8, 0.2]) == pytest.approx([0.65, 0.35])
