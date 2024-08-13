@@ -1263,3 +1263,12 @@ def test_naive_credal_outcome_4() -> None:
     ) == pytest.approx(
         [0.96, 0.9473684210526315, 0.967741935483871, 2.2903225806451615, 0.38]
     )
+
+
+def test_naive_credal_outcome_5() -> None:
+    model = train_model(
+        data=[[0, 0]],
+        c_column=0,
+        a_columns=[1],
+    )
+    assert naive_bayes_outcome(model, [1, 0]) == [0]
