@@ -979,6 +979,7 @@ COL_DENSITY = 4
 COL_SEVERITY = 5
 
 
+# possible values for each column in the data
 cancer_values: Sequence[Collection[int]] = [
     range(1, 7),  # BI-RADS
     {0, 45, 55, 75},  # age
