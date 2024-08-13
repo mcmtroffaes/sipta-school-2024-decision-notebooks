@@ -1065,10 +1065,14 @@ def naive_bayes_prob(model: Model, test_row: Sequence[int], c: int) -> float:
 def naive_bayes_outcome(
     model: Model, test_row: Sequence[int]
 ) -> Sequence[float | None]:
-    probs = {c: naive_bayes_prob(model, test_row, c) for c in model.nc}
     c_test = test_row[model.c_column]
-    max_prob = max(probs.values())
-    return [1 if probs[c_test] + TOL >= max_prob else 0]
+    if model.nc[c_test] == 0:
+        # will never predict a class that is not in the training data
+        return [0]
+    else:
+        probs = {c: naive_bayes_prob(model, test_row, c) for c in model.nc}
+        max_prob = max(probs.values())
+        return [1 if probs[c_test] + TOL >= max_prob else 0]
 
 
 def mean_outcome(outcomes: Sequence[Sequence[float | None]]) -> Sequence[float | None]:
