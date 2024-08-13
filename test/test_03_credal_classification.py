@@ -1070,10 +1070,10 @@ def test_cancer_model() -> None:
 
 
 def naive_bayes_prob(model: Model, test_row: Sequence[int], c: int) -> float:
-    pc = model.nc[c] / model.n  # p(c)=n(c)/N
     if model.nc[c] == 0:
         return 0.0  # prevent division by zero... class not in data so probability 0
     else:
+        pc = model.nc[c] / model.n  # p(c)=n(c)/N
         pacs = [  # p(a|c)=n(a_i,c)/n(c)
             model.nac[a_column][test_row[a_column], c] / model.nc[c]
             for a_column in model.a_columns
