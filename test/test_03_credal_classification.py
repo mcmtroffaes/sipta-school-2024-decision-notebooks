@@ -1,6 +1,6 @@
 import csv
 from collections import Counter
-from collections.abc import Callable, Collection, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from math import prod
 from statistics import mean
@@ -980,9 +980,9 @@ COL_SEVERITY = 5
 
 
 # possible values for each column in the data
-cancer_values: Sequence[Collection[int]] = [
+cancer_values: Sequence[Sequence[int]] = [
     range(1, 7),  # BI-RADS
-    {0, 45, 55, 75},  # age
+    [0, 45, 55, 75],  # age
     range(1, 5),  # shape
     range(1, 6),  # margin
     range(1, 5),  # density
@@ -1021,7 +1021,7 @@ cancer_data = [
 
 @dataclass
 class Model:
-    values: Sequence[Collection[int]]  # possible values
+    values: Sequence[Sequence[int]]  # possible values
     c_column: int  # class column index
     a_columns: Sequence[int]  # attribute column indices
     n: int  # N, total number of observations
@@ -1031,7 +1031,7 @@ class Model:
 
 
 def train_model(
-    values: Sequence[Collection[int]],
+    values: Sequence[Sequence[int]],
     data: Sequence[Sequence[int]],
     c_column: int,
     a_columns: Sequence[int],
@@ -1110,7 +1110,7 @@ def kfcv_outcomes(
     # test(model, test_row) -> sequence of accuracy measures
     test: Callable[[Model, Sequence[int]], Sequence[float | None]],
     folds: int,
-    values: Sequence[Collection[int]],
+    values: Sequence[Sequence[int]],
     data: Sequence[Sequence[int]],
     c_column: int,
     a_columns: Sequence[int],
@@ -1215,7 +1215,7 @@ def naive_credal_outcome_2(
             for t in [0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99]
         )
 
-    c_values = list(model.values[model.c_column])  # is_maximal needs a list
+    c_values = model.values[model.c_column]
     is_max_cs = is_maximal(dominates, c_values)
     set_size = sum(is_max_cs)
     c_test = test_row[model.c_column]
@@ -1309,7 +1309,7 @@ def test_naive_credal_outcome_4() -> None:
 
 def test_zero_counts() -> None:
     model = train_model(
-        values=[{0, 1}, {0}],
+        values=[range(2), range(1)],
         data=[[0, 0]],
         c_column=0,
         a_columns=[1],
