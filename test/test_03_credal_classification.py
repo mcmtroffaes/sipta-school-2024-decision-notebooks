@@ -1195,10 +1195,10 @@ def naive_credal_outcome_2(
             for t in [0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99]
         )
 
-    cs = list(model.nc)
+    c_test = test_row[model.c_column]
+    cs = list(set(list(model.nc) + [c_test]))  # is_maximal needs a list
     is_max_cs = is_maximal(dominates, cs)
     set_size = sum(is_max_cs)
-    c_test = test_row[model.c_column]
     correct = is_max_cs[cs.index(c_test)]
     return [
         1 if correct else 0,  # accuracy
@@ -1278,3 +1278,4 @@ def test_zero_counts() -> None:
     )
     assert naive_bayes_outcome(model, [1, 0]) == [0]
     assert naive_credal_outcome(model, [1, 0]) == [1, None, 1, 2, 0]
+    assert naive_credal_outcome_2(model, [1, 0]) == [1, None, 1, 2, 0]
