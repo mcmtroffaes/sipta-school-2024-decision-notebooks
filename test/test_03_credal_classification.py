@@ -1137,10 +1137,11 @@ def naive_credal_prob(
 def naive_credal_outcome(
     model: Model, test_row: Sequence[int]
 ) -> Sequence[float | None]:
-    probs = {c: naive_credal_prob(model, test_row, c) for c in model.nc}
     c_test = test_row[model.c_column]
+    cs = set(list(model.nc) + [c_test])
+    probs = {c: naive_credal_prob(model, test_row, c) for c in cs}
     max_lowprob = max(low for low, upp in probs.values())
-    set_size = sum(1 if probs[c][1] + TOL >= max_lowprob else 0 for c in model.nc)
+    set_size = sum(1 if probs[c][1] + TOL >= max_lowprob else 0 for c in cs)
     correct = probs[c_test][1] + TOL >= max_lowprob
     return [
         1 if correct else 0,  # accuracy
@@ -1269,10 +1270,11 @@ def test_naive_credal_outcome_4() -> None:
     )
 
 
-def test_naive_credal_outcome_5() -> None:
+def test_zero_counts() -> None:
     model = train_model(
         data=[[0, 0]],
         c_column=0,
         a_columns=[1],
     )
     assert naive_bayes_outcome(model, [1, 0]) == [0]
+    assert naive_credal_outcome(model, [1, 0]) == [1, None, 1, 2, 0]
