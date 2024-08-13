@@ -1,6 +1,6 @@
 import csv
 from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from math import prod
 from statistics import mean
@@ -979,6 +979,16 @@ COL_DENSITY = 4
 COL_SEVERITY = 5
 
 
+cancer_values: Sequence[Collection[int]] = [
+    range(1, 7),  # BI-RADS
+    {0, 45, 55, 75},  # age
+    range(1, 5),  # shape
+    range(1, 6),  # margin
+    range(1, 5),  # density
+    range(2),  # severity
+]
+
+
 def process_row(vals: Sequence[str]) -> Sequence[int] | None:
     # omit rows that have missing data
     if "?" in vals:
@@ -998,7 +1008,10 @@ def process_row(vals: Sequence[str]) -> Sequence[int] | None:
         birads = 1
     elif birads == 55:
         birads = 5
-    return birads, age, shape, margin, density, severity
+    new_row = birads, age, shape, margin, density, severity
+    # check all values are what we expect
+    assert all(value in values for value, values in zip(new_row, cancer_values))
+    return new_row
 
 
 cancer_data = [
