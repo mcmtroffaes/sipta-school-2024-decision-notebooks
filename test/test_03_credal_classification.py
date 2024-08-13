@@ -1008,10 +1008,7 @@ def process_row(vals: Sequence[str]) -> Sequence[int] | None:
         birads = 1
     elif birads == 55:
         birads = 5
-    new_row = birads, age, shape, margin, density, severity
-    # check all values are what we expect
-    assert all(value in values for value, values in zip(new_row, cancer_values))
-    return new_row
+    return birads, age, shape, margin, density, severity
 
 
 cancer_data = [
@@ -1023,6 +1020,7 @@ cancer_data = [
 
 @dataclass
 class Model:
+    values: Sequence[Collection[int]]  # possible values
     c_column: int  # class column index
     a_columns: Sequence[int]  # attribute column indices
     n: int  # N, total number of observations
@@ -1032,17 +1030,20 @@ class Model:
 
 
 def train_model(
+    values: Sequence[Collection[int]],
     data: Sequence[Sequence[int]],
     c_column: int,
     a_columns: Sequence[int],
     s: float = 2.0,
 ) -> Model:
+    assert all(all(val in vals for val, vals in zip(row, values)) for row in data)
     nc = Counter(row[c_column] for row in data)
     nac = {
         a_column: Counter((row[a_column], row[c_column]) for row in data)
         for a_column in a_columns
     }
     return Model(
+        values=values,
         c_column=c_column,
         a_columns=a_columns,
         n=len(data),
@@ -1053,6 +1054,7 @@ def train_model(
 
 
 cancer_model = train_model(
+    values=cancer_values,
     data=cancer_data,
     c_column=COL_SEVERITY,
     a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
@@ -1083,7 +1085,8 @@ def naive_bayes_outcome(
         # will never predict a class that is not in the training data
         return [0]
     else:
-        probs = {c: naive_bayes_prob(model, test_row, c) for c in model.nc}
+        c_values = model.values[model.c_column]
+        probs = {c: naive_bayes_prob(model, test_row, c) for c in c_values}
         max_prob = max(probs.values())
         return [1 if probs[c_test] + TOL >= max_prob else 0]
 
@@ -1106,6 +1109,7 @@ def kfcv_outcomes(
     # test(model, test_row) -> sequence of accuracy measures
     test: Callable[[Model, Sequence[int]], Sequence[float | None]],
     folds: int,
+    values: Sequence[Collection[int]],
     data: Sequence[Sequence[int]],
     c_column: int,
     a_columns: Sequence[int],
@@ -1116,7 +1120,7 @@ def kfcv_outcomes(
         test_data = data[fold::folds]
         test_indices = range(fold, len(data), folds)
         train_data = [row for i, row in enumerate(data) if i not in test_indices]
-        model = train_model(train_data, c_column, a_columns, s)
+        model = train_model(values, train_data, c_column, a_columns, s)
         outcomes += [test(model, row) for row in test_data]
     return outcomes
 
@@ -1126,6 +1130,7 @@ def test_kfcv_outcomes() -> None:
         kfcv_outcomes(
             test=naive_bayes_outcome,
             folds=10,
+            values=cancer_values,
             data=cancer_data,
             c_column=COL_SEVERITY,
             a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
@@ -1150,11 +1155,11 @@ def naive_credal_prob(
 def naive_credal_outcome(
     model: Model, test_row: Sequence[int]
 ) -> Sequence[float | None]:
-    c_test = test_row[model.c_column]
-    cs = set(list(model.nc) + [c_test])
-    probs = {c: naive_credal_prob(model, test_row, c) for c in cs}
+    c_values = model.values[model.c_column]
+    probs = {c: naive_credal_prob(model, test_row, c) for c in c_values}
     max_lowprob = max(low for low, upp in probs.values())
-    set_size = sum(1 if probs[c][1] + TOL >= max_lowprob else 0 for c in cs)
+    set_size = sum(1 if probs[c][1] + TOL >= max_lowprob else 0 for c in c_values)
+    c_test = test_row[model.c_column]
     correct = probs[c_test][1] + TOL >= max_lowprob
     return [
         1 if correct else 0,  # accuracy
@@ -1170,6 +1175,7 @@ def test_naive_credal_outcome() -> None:
         kfcv_outcomes(
             test=naive_credal_outcome,
             folds=10,
+            values=cancer_values,
             data=cancer_data,
             c_column=COL_SEVERITY,
             a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
@@ -1208,11 +1214,11 @@ def naive_credal_outcome_2(
             for t in [0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99]
         )
 
-    c_test = test_row[model.c_column]
-    cs = list(set(list(model.nc) + [c_test]))  # is_maximal needs a list
-    is_max_cs = is_maximal(dominates, cs)
+    c_values = list(model.values[model.c_column])  # is_maximal needs a list
+    is_max_cs = is_maximal(dominates, c_values)
     set_size = sum(is_max_cs)
-    correct = is_max_cs[cs.index(c_test)]
+    c_test = test_row[model.c_column]
+    correct = is_max_cs[c_values.index(c_test)]
     return [
         1 if correct else 0,  # accuracy
         (1 if correct else 0) if set_size == 1 else None,  # single accuracy
@@ -1227,6 +1233,7 @@ def test_naive_credal_outcome_2() -> None:
         kfcv_outcomes(
             test=naive_credal_outcome_2,
             folds=10,
+            values=cancer_values,
             data=cancer_data,
             c_column=COL_SEVERITY,
             a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
@@ -1242,6 +1249,7 @@ def test_naive_credal_outcome_3() -> None:
         kfcv_outcomes(
             test=naive_credal_outcome,
             folds=10,
+            values=cancer_values,
             data=cancer_data[:50],
             c_column=COL_SEVERITY,
             a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
@@ -1251,6 +1259,7 @@ def test_naive_credal_outcome_3() -> None:
         kfcv_outcomes(
             test=naive_credal_outcome_2,
             folds=10,
+            values=cancer_values,
             data=cancer_data[:50],
             c_column=COL_SEVERITY,
             a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
@@ -1263,28 +1272,43 @@ def test_naive_credal_outcome_4() -> None:
         kfcv_outcomes(
             test=naive_credal_outcome,
             folds=10,
-            data=cancer_data[:50],
+            values=cancer_values,
+            data=cancer_data[:100],
             c_column=COL_BIRADS,
             a_columns=[COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
         )
     ) == pytest.approx(
-        [0.96, 0.9230769230769231, 0.972972972972973, 2.27027027027027, 0.26]
+        [0.86, 0.8333333333333334, 0.8714285714285714, 4.642857142857143, 0.3]
+    )
+    assert mean_outcome(
+        kfcv_outcomes(
+            test=naive_credal_outcome,
+            folds=10,
+            values=cancer_values,
+            data=cancer_data[:200],
+            c_column=COL_BIRADS,
+            a_columns=[COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
+        )
+    ) == pytest.approx(
+        [0.815, 0.7704918032786885, 0.8846153846153846, 3.858974358974359, 0.61]
     )
     assert mean_outcome(
         kfcv_outcomes(
             test=naive_credal_outcome_2,
             folds=10,
-            data=cancer_data[:50],
+            values=cancer_values,
+            data=cancer_data[:400],
             c_column=COL_BIRADS,
             a_columns=[COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
         )
     ) == pytest.approx(
-        [0.96, 0.9473684210526315, 0.967741935483871, 2.2903225806451615, 0.38]
+        [0.785, 0.7717041800643086, 0.8314606741573034, 3.1235955056179776, 0.7775]
     )
 
 
 def test_zero_counts() -> None:
     model = train_model(
+        values=[{0, 1}, {0}],
         data=[[0, 0]],
         c_column=0,
         a_columns=[1],
