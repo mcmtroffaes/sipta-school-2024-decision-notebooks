@@ -1071,25 +1071,24 @@ def test_cancer_model() -> None:
 
 def naive_bayes_prob(model: Model, test_row: Sequence[int], c: int) -> float:
     pc = model.nc[c] / model.n  # p(c)=n(c)/N
-    pacs = [  # p(a|c)=n(a_i,c)/n(c)
-        model.nac[a_column][test_row[a_column], c] / model.nc[c]
-        for a_column in model.a_columns
-    ]
-    return pc * prod(pacs)
+    if model.nc[c] == 0:
+        return 0.0  # prevent division by zero... class not in data so probability 0
+    else:
+        pacs = [  # p(a|c)=n(a_i,c)/n(c)
+            model.nac[a_column][test_row[a_column], c] / model.nc[c]
+            for a_column in model.a_columns
+        ]
+        return pc * prod(pacs)
 
 
 def naive_bayes_outcome(
     model: Model, test_row: Sequence[int]
 ) -> Sequence[float | None]:
+    c_values = model.values[model.c_column]
+    probs = {c: naive_bayes_prob(model, test_row, c) for c in c_values}
+    max_prob = max(probs.values())
     c_test = test_row[model.c_column]
-    if model.nc[c_test] == 0:
-        # will never predict a class that is not in the training data
-        return [0]
-    else:
-        c_values = model.values[model.c_column]
-        probs = {c: naive_bayes_prob(model, test_row, c) for c in c_values}
-        max_prob = max(probs.values())
-        return [1 if probs[c_test] + TOL >= max_prob else 0]
+    return [1 if probs[c_test] + TOL >= max_prob else 0]
 
 
 def mean_outcome(outcomes: Sequence[Sequence[float | None]]) -> Sequence[float | None]:
