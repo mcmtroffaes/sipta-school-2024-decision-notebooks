@@ -1306,9 +1306,9 @@ def test_naive_credal_outcome_4() -> None:
     )
 
 
-def test_zero_counts() -> None:
+def test_zero_counts_1() -> None:
     model = train_model(
-        values=[range(2), range(1)],
+        values=[range(2), range(2)],
         data=[[0, 0]],
         c_column=0,
         a_columns=[1],
@@ -1316,3 +1316,24 @@ def test_zero_counts() -> None:
     assert naive_bayes_outcome(model, [1, 0]) == [0]
     assert naive_credal_outcome(model, [1, 0]) == [1, None, 1, 2, 0]
     assert naive_credal_outcome_2(model, [1, 0]) == [1, None, 1, 2, 0]
+
+
+@pytest.mark.parametrize(
+    "test_row",
+    [
+        [0, 0],
+        [0, 1],
+        [1, 0],
+        [1, 1],
+    ],
+)
+def test_zero_counts_2(test_row: Sequence[int]) -> None:
+    model = train_model(
+        values=[range(2), range(2)],
+        data=[],
+        c_column=0,
+        a_columns=[1],
+    )
+    assert naive_bayes_outcome(model, test_row) == [1]
+    assert naive_credal_outcome(model, test_row) == [1, None, 1, 2, 0]
+    assert naive_credal_outcome_2(model, test_row) == [1, None, 1, 2, 0]
