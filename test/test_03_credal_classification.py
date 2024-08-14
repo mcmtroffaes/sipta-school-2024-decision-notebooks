@@ -1082,12 +1082,10 @@ def naive_bayes_prob_1(model: Model, test_row: Sequence[int], c: int) -> float:
 
 # same as naive_bayes_prob_1 but use uniform prior to smooth out the zero counts
 def naive_bayes_prob_2(model: Model, test_row: Sequence[int], c: int) -> float:
-    # laplace corrections
     tc: float = 1 / len(model.values[model.c_column])
     tacs: Sequence[float] = [
         tc / len(model.values[a_column]) for a_column in model.a_columns
     ]
-    # adjusted counts
     n = model.n + model.s
     nc = model.nc[c] + model.s * tc
     nacs = [
