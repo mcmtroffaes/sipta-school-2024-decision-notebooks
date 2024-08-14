@@ -1069,23 +1069,43 @@ def test_cancer_model() -> None:
     assert cancer_model.nac[COL_AGE][75, 0] == 10
 
 
-def naive_bayes_prob(model: Model, test_row: Sequence[int], c: int) -> float:
-    if model.nc[c] == 0:
-        return 0.0  # prevent division by zero... class not in data so probability 0
-    else:
-        pc = model.nc[c] / model.n  # p(c)=n(c)/N
-        pacs = [  # p(a|c)=n(a_i,c)/n(c)
-            model.nac[a_column][test_row[a_column], c] / model.nc[c]
-            for a_column in model.a_columns
-        ]
-        return pc * prod(pacs)
+def naive_bayes_prob_1(model: Model, test_row: Sequence[int], c: int) -> float:
+    n = model.n
+    nc = model.nc[c]
+    nacs = [model.nac[a_column][test_row[a_column], c] for a_column in model.a_columns]
+    # p(c)=n(c)/N
+    pc = nc / n
+    # p(a|c)=(n(a_i,c)+s*t(a_i,c))/(n(c)+s*t(c))
+    pacs = [nac / nc for nac in nacs]
+    return pc * prod(pacs)
+
+
+# same as naive_bayes_prob_1 but use uniform prior to smooth out the zero counts
+def naive_bayes_prob_2(model: Model, test_row: Sequence[int], c: int) -> float:
+    # laplace corrections
+    tc: float = 1 / len(model.values[model.c_column])
+    tacs: Sequence[float] = [
+        tc / len(model.values[a_column]) for a_column in model.a_columns
+    ]
+    # adjusted counts
+    n = model.n + model.s
+    nc = model.nc[c] + model.s * tc
+    nacs = [
+        model.nac[a_column][test_row[a_column], c] + model.s * tac
+        for a_column, tac in zip(model.a_columns, tacs)
+    ]
+    # p(c)=(n(c)+s*t(c))/(N+s)
+    pc = nc / n
+    # p(a|c)=(n(a_i,c)+s*t(a_i,c))/(n(c)+s*t(c))
+    pacs = [nac / nc for nac in nacs]
+    return pc * prod(pacs)
 
 
 def naive_bayes_outcome(
     model: Model, test_row: Sequence[int]
 ) -> Sequence[float | None]:
     c_values = model.values[model.c_column]
-    probs = {c: naive_bayes_prob(model, test_row, c) for c in c_values}
+    probs = {c: naive_bayes_prob_2(model, test_row, c) for c in c_values}
     max_prob = max(probs.values())
     c_test = test_row[model.c_column]
     return [1 if probs[c_test] + TOL >= max_prob else 0]
@@ -1304,6 +1324,16 @@ def test_naive_credal_outcome_4() -> None:
     ) == pytest.approx(
         [0.785, 0.7717041800643086, 0.8314606741573034, 3.1235955056179776, 0.7775]
     )
+
+
+def test_zero_counts_0() -> None:
+    model = train_model(values=[range(2), range(2)], data=[], c_column=0, a_columns=[1])
+    with pytest.raises(ZeroDivisionError):
+        naive_bayes_prob_1(model=model, test_row=[0, 0], c=0)
+    assert naive_bayes_prob_2(model=model, test_row=[0, 0], c=0) == pytest.approx(0.25)
+    assert naive_bayes_prob_2(model=model, test_row=[0, 0], c=1) == pytest.approx(0.25)
+    assert naive_bayes_prob_2(model=model, test_row=[0, 1], c=0) == pytest.approx(0.25)
+    assert naive_bayes_prob_2(model=model, test_row=[0, 1], c=1) == pytest.approx(0.25)
 
 
 def test_zero_counts_1() -> None:
