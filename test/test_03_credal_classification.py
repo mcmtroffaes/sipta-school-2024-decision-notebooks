@@ -4,6 +4,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from math import prod
 from statistics import mean
+from typing import NamedTuple
 
 import pytest
 
@@ -1099,61 +1100,117 @@ def naive_bayes_prob_2(model: Model, test_row: Sequence[int], c: int) -> float:
     return pc * prod(pacs)
 
 
-def naive_bayes_outcome(
-    model: Model, test_row: Sequence[int]
-) -> Sequence[float | None]:
+def naive_bayes_outcome(model: Model, test_row: Sequence[int]) -> Sequence[bool]:
     c_domain = model.domains[model.c_column]
-    probs = {c: naive_bayes_prob_2(model, test_row, c) for c in c_domain}
-    max_prob = max(probs.values())
-    c_test = test_row[model.c_column]
-    return [1 if probs[c_test] + TOL >= max_prob else 0]
+    probs = [naive_bayes_prob_2(model, test_row, c) for c in c_domain]
+    max_prob = max(probs)
+    return [prob + TOL >= max_prob for prob in probs]
 
 
-def mean_outcome(outcomes: Sequence[Sequence[float | None]]) -> Sequence[float | None]:
+class Diagnostic(NamedTuple):
+    accuracy: float | None
+    single_accuracy: float | None
+    set_accuracy: float | None
+    indeterminate_set_size: float | None
+    determinacy: float | None
+    discounted_accuracy: float | None
+
+
+def diagnostic(correct: bool, set_size: int) -> Diagnostic:
+    accuracy = 1 if correct else 0
+    return Diagnostic(
+        accuracy=accuracy,
+        single_accuracy=accuracy if set_size == 1 else None,
+        set_accuracy=accuracy if set_size != 1 else None,
+        indeterminate_set_size=set_size if set_size != 1 else None,
+        determinacy=1 if set_size == 1 else 0,
+        discounted_accuracy=accuracy / set_size,
+    )
+
+
+def mean_diagnostic(diagnostics: Sequence[Diagnostic]) -> Diagnostic:
     def _mean(xs: Sequence[float | None]) -> float | None:
         xs2 = [x for x in xs if x is not None]
         return mean(xs2) if xs2 else None
 
-    return list(map(_mean, zip(*outcomes)))
+    return Diagnostic(*map(_mean, zip(*diagnostics)))
 
 
-def test_mean_outcome() -> None:
-    assert mean_outcome(
-        [naive_bayes_outcome(cancer_model, row) for row in cancer_data]
-    ) == [pytest.approx(0.8385, abs=0.0001)]
+def test_mean_diagnostic() -> None:
+    assert mean_diagnostic(
+        [diagnostic(True, 2), diagnostic(False, 1)]
+    ) == pytest.approx(Diagnostic(0.5, 0, 1, 2, 0.5, 0.25))
 
 
-def kfcv_outcomes(
-    # test(model, test_row) -> sequence of accuracy measures
-    test: Callable[[Model, Sequence[int]], Sequence[float | None]],
+def model_diagnostic(
+    model: Model,
+    test_row: Sequence[int],
+    test: Callable[[Model, Sequence[int]], Sequence[bool]],
+) -> Diagnostic:
+    outcome: Sequence[bool] = test(model, test_row)  # predicted classes
+    test_c: int = test_row[model.c_column]  # actual class
+    return diagnostic(
+        correct=outcome[model.domains[model.c_column].index(test_c)],
+        set_size=sum(outcome),
+    )
+
+
+def test_model_diagnostic() -> None:
+    assert mean_diagnostic(
+        [
+            model_diagnostic(cancer_model, row, naive_bayes_outcome)
+            for row in cancer_data
+        ]
+    ) == pytest.approx(
+        Diagnostic(
+            accuracy=0.8385542168674699,
+            single_accuracy=0.8383594692400482,
+            set_accuracy=1,
+            indeterminate_set_size=2,
+            determinacy=0.9987951807228915,
+            discounted_accuracy=0.8379518072289157,
+        )
+    )
+
+
+def kfcv(
+    # test(model, test_row) -> sequence of bools (optimal classes)
+    test: Callable[[Model, Sequence[int]], Sequence[bool]],
     folds: int,
     domains: Sequence[Sequence[int]],
     data: Sequence[Sequence[int]],
     c_column: int,
     a_columns: Sequence[int],
     s: float = 2.0,
-) -> Sequence[Sequence[float | None]]:
-    outcomes = []
+) -> Diagnostic:
+    diagnostics: list[Diagnostic] = []
     for fold in range(folds):
         test_data = data[fold::folds]
         test_indices = range(fold, len(data), folds)
         train_data = [row for i, row in enumerate(data) if i not in test_indices]
         model = train_model(domains, train_data, c_column, a_columns, s)
-        outcomes += [test(model, row) for row in test_data]
-    return outcomes
+        diagnostics += [model_diagnostic(model, row, test) for row in test_data]
+    return mean_diagnostic(diagnostics)
 
 
 def test_kfcv_outcomes() -> None:
-    assert mean_outcome(
-        kfcv_outcomes(
-            test=naive_bayes_outcome,
-            folds=10,
-            domains=cancer_domains,
-            data=cancer_data,
-            c_column=COL_SEVERITY,
-            a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
+    assert kfcv(
+        test=naive_bayes_outcome,
+        folds=10,
+        domains=cancer_domains,
+        data=cancer_data,
+        c_column=COL_SEVERITY,
+        a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
+    ) == pytest.approx(
+        Diagnostic(
+            accuracy=0.8337349397590361,
+            single_accuracy=0.8333333333333334,
+            set_accuracy=1,
+            indeterminate_set_size=2,
+            determinacy=0.9975903614457832,
+            discounted_accuracy=0.8325301204819278,
         )
-    ) == [pytest.approx(0.8337, abs=0.0001)]
+    )
 
 
 def naive_credal_prob(
@@ -1170,36 +1227,30 @@ def naive_credal_prob(
     return pc[0] * prod(pac[0] for pac in pacs), pc[1] * prod(pac[1] for pac in pacs)
 
 
-def naive_credal_outcome(
-    model: Model, test_row: Sequence[int]
-) -> Sequence[float | None]:
+def naive_credal_outcome(model: Model, test_row: Sequence[int]) -> Sequence[bool]:
     c_domain = model.domains[model.c_column]
-    probs = {c: naive_credal_prob(model, test_row, c) for c in c_domain}
-    max_lowprob = max(low for low, upp in probs.values())
-    set_size = sum(1 if probs[c][1] + TOL >= max_lowprob else 0 for c in c_domain)
-    c_test = test_row[model.c_column]
-    correct = probs[c_test][1] + TOL >= max_lowprob
-    return [
-        1 if correct else 0,  # accuracy
-        (1 if correct else 0) if set_size == 1 else None,  # single accuracy
-        (1 if correct else 0) if set_size != 1 else None,  # set accuracy
-        set_size if set_size != 1 else None,  # indeterminate set size
-        1 if set_size == 1 else 0,  # determinacy
-    ]
+    probs = [naive_credal_prob(model, test_row, c) for c in c_domain]
+    max_lowprob = max(low for low, upp in probs)
+    return [upp + TOL >= max_lowprob for low, upp in probs]
 
 
 def test_naive_credal_outcome() -> None:
-    assert mean_outcome(
-        kfcv_outcomes(
-            test=naive_credal_outcome,
-            folds=10,
-            domains=cancer_domains,
-            data=cancer_data,
-            c_column=COL_SEVERITY,
-            a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
-        )
+    assert kfcv(
+        test=naive_credal_outcome,
+        folds=10,
+        domains=cancer_domains,
+        data=cancer_data,
+        c_column=COL_SEVERITY,
+        a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
     ) == pytest.approx(
-        [0.8409638554216867, 0.8384332925336597, 1, 2, 0.9843373493975903]
+        Diagnostic(
+            accuracy=0.8409638554216867,
+            single_accuracy=0.8384332925336597,
+            set_accuracy=1,
+            indeterminate_set_size=2,
+            determinacy=0.9843373493975903,
+            discounted_accuracy=0.8331325301204819,
+        )
     )
 
 
@@ -1213,9 +1264,7 @@ def is_maximal(
     return [is_not_dominated(c1) for c1 in cs]
 
 
-def naive_credal_outcome_2(
-    model: Model, test_row: Sequence[int]
-) -> Sequence[float | None]:
+def naive_credal_outcome_2(model: Model, test_row: Sequence[int]) -> Sequence[bool]:
 
     def dominates(c1: int, c2: int) -> bool:
         return all(
@@ -1233,94 +1282,79 @@ def naive_credal_outcome_2(
         )
 
     c_domain = model.domains[model.c_column]
-    is_max_cs = is_maximal(dominates, c_domain)
-    set_size = sum(is_max_cs)
-    c_test = test_row[model.c_column]
-    correct = is_max_cs[c_domain.index(c_test)]
-    return [
-        1 if correct else 0,  # accuracy
-        (1 if correct else 0) if set_size == 1 else None,  # single accuracy
-        (1 if correct else 0) if set_size != 1 else None,  # set accuracy
-        set_size if set_size != 1 else None,  # indeterminate set size
-        1 if set_size == 1 else 0,  # determinacy
-    ]
+    return is_maximal(dominates, c_domain)
 
 
 def test_naive_credal_outcome_2() -> None:
-    assert mean_outcome(
-        kfcv_outcomes(
-            test=naive_credal_outcome_2,
-            folds=10,
-            domains=cancer_domains,
-            data=cancer_data,
-            c_column=COL_SEVERITY,
-            a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
-        )
+    assert kfcv(
+        test=naive_credal_outcome_2,
+        folds=10,
+        domains=cancer_domains,
+        data=cancer_data,
+        c_column=COL_SEVERITY,
+        a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
     ) == pytest.approx(
         # same as with naive_credal_outcome! this is due to large dataset
-        [0.8409638554216867, 0.8384332925336597, 1, 2, 0.9843373493975903]
+        Diagnostic(
+            accuracy=0.8409638554216867,
+            single_accuracy=0.8384332925336597,
+            set_accuracy=1,
+            indeterminate_set_size=2,
+            determinacy=0.9843373493975903,
+            discounted_accuracy=0.8331325301204819,
+        )
     )
 
 
 def test_naive_credal_outcome_3() -> None:
-    assert mean_outcome(
-        kfcv_outcomes(
-            test=naive_credal_outcome,
-            folds=10,
-            domains=cancer_domains,
-            data=cancer_data[:50],
-            c_column=COL_SEVERITY,
-            a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
-        )
-    ) == pytest.approx([0.88, 0.8536585365853658, 1, 2, 0.82])
-    assert mean_outcome(
-        kfcv_outcomes(
-            test=naive_credal_outcome_2,
-            folds=10,
-            domains=cancer_domains,
-            data=cancer_data[:50],
-            c_column=COL_SEVERITY,
-            a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
-        )
-    ) == pytest.approx([0.86, 0.8409090909090909, 1, 2, 0.88])
+    assert kfcv(
+        test=naive_credal_outcome,
+        folds=10,
+        domains=cancer_domains,
+        data=cancer_data[:50],
+        c_column=COL_SEVERITY,
+        a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
+    ) == pytest.approx([0.88, 0.8536585365853658, 1, 2, 0.82, 0.79])
+    assert kfcv(
+        test=naive_credal_outcome_2,
+        folds=10,
+        domains=cancer_domains,
+        data=cancer_data[:50],
+        c_column=COL_SEVERITY,
+        a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
+    ) == pytest.approx([0.86, 0.8409090909090909, 1, 2, 0.88, 0.8])
 
 
 def test_naive_credal_outcome_4() -> None:
-    assert mean_outcome(
-        kfcv_outcomes(
-            test=naive_credal_outcome,
-            folds=10,
-            domains=cancer_domains,
-            data=cancer_data[:100],
-            c_column=COL_BIRADS,
-            a_columns=[COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
-        )
+    assert kfcv(
+        test=naive_credal_outcome,
+        folds=10,
+        domains=cancer_domains,
+        data=cancer_data[:100],
+        c_column=COL_BIRADS,
+        a_columns=[COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
     ) == pytest.approx(
-        [0.86, 0.8333333333333334, 0.8714285714285714, 4.642857142857143, 0.3]
+        [0.86, 0.833333333333, 0.871428571428, 4.64285714285, 0.3, 0.3828333333333]
     )
-    assert mean_outcome(
-        kfcv_outcomes(
-            test=naive_credal_outcome,
-            folds=10,
-            domains=cancer_domains,
-            data=cancer_data[:200],
-            c_column=COL_BIRADS,
-            a_columns=[COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
-        )
+    assert kfcv(
+        test=naive_credal_outcome,
+        folds=10,
+        domains=cancer_domains,
+        data=cancer_data[:200],
+        c_column=COL_BIRADS,
+        a_columns=[COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
     ) == pytest.approx(
-        [0.815, 0.7704918032786885, 0.8846153846153846, 3.858974358974359, 0.61]
+        [0.815, 0.770491803278, 0.884615384615, 3.85897435897, 0.61, 0.562916666666]
     )
-    assert mean_outcome(
-        kfcv_outcomes(
-            test=naive_credal_outcome_2,
-            folds=10,
-            domains=cancer_domains,
-            data=cancer_data[:400],
-            c_column=COL_BIRADS,
-            a_columns=[COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
-        )
+    assert kfcv(
+        test=naive_credal_outcome_2,
+        folds=10,
+        domains=cancer_domains,
+        data=cancer_data[:400],
+        c_column=COL_BIRADS,
+        a_columns=[COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
     ) == pytest.approx(
-        [0.785, 0.7717041800643086, 0.8314606741573034, 3.1235955056179776, 0.7775]
+        [0.785, 0.771704180064, 0.831460674157, 3.123595505617, 0.7775, 0.664625]
     )
 
 
@@ -1343,9 +1377,9 @@ def test_zero_counts_1() -> None:
         c_column=0,
         a_columns=[1],
     )
-    assert naive_bayes_outcome(model, [1, 0]) == [0]
-    assert naive_credal_outcome(model, [1, 0]) == [1, None, 1, 2, 0]
-    assert naive_credal_outcome_2(model, [1, 0]) == [1, None, 1, 2, 0]
+    assert naive_bayes_outcome(model, [1, 0]) == [True, False]
+    assert naive_credal_outcome(model, [1, 0]) == [True, True]
+    assert naive_credal_outcome_2(model, [1, 0]) == [True, True]
 
 
 @pytest.mark.parametrize(
@@ -1364,6 +1398,6 @@ def test_zero_counts_2(test_row: Sequence[int]) -> None:
         c_column=0,
         a_columns=[1],
     )
-    assert naive_bayes_outcome(model, test_row) == [1]
-    assert naive_credal_outcome(model, test_row) == [1, None, 1, 2, 0]
-    assert naive_credal_outcome_2(model, test_row) == [1, None, 1, 2, 0]
+    assert naive_bayes_outcome(model, test_row) == [True, True]
+    assert naive_credal_outcome(model, test_row) == [True, True]
+    assert naive_credal_outcome_2(model, test_row) == [True, True]
