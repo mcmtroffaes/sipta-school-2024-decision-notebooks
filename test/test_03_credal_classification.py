@@ -982,12 +982,12 @@ COL_SEVERITY = 5
 
 # possible values for each column in the data
 cancer_domains: Sequence[Sequence[int]] = [
-    range(1, 7),  # BI-RADS
-    [0, 45, 55, 75],  # age
-    range(1, 5),  # shape
-    range(1, 6),  # margin
-    range(1, 5),  # density
-    range(2),  # severity
+    range(1, 7),  # BI-RADS: 1-6
+    [0, 45, 55, 75],  # age: 0+, 45+, 55+, 75+
+    range(1, 5),  # shape: 1-4
+    range(1, 6),  # margin: 1-5
+    range(1, 5),  # density: 1-4
+    range(2),  # severity: 0-1
 ]
 
 
@@ -1005,7 +1005,7 @@ def process_row(vals: Sequence[str]) -> Sequence[int] | None:
         age = 45
     else:
         age = 0
-    # fix typos in birads column
+    # fix typos in BI-RADS column
     if birads == 0:
         birads = 1
     elif birads == 55:
@@ -1022,7 +1022,7 @@ cancer_data = [
 
 @dataclass
 class Model:
-    domains: Sequence[Sequence[int]]  # possible values
+    domains: Sequence[Sequence[int]]  # possible values for each column
     c_column: int  # class column index
     a_columns: Sequence[int]  # attribute column indices
     n: int  # N, total number of observations
@@ -1081,7 +1081,7 @@ def naive_bayes_prob_1(model: Model, test_row: Sequence[int], c: int) -> float:
     return pc * prod(pacs)
 
 
-# same as naive_bayes_prob_1 but use uniform prior to smooth out the zero counts
+# same as naive_bayes_prob_1 but smooth out the zero counts
 def naive_bayes_prob_2(model: Model, test_row: Sequence[int], c: int) -> float:
     tc: float = 1 / len(model.domains[model.c_column])
     tacs: Sequence[float] = [
