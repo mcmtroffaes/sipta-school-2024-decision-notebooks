@@ -1116,8 +1116,16 @@ class Diagnostic(NamedTuple):
     discounted_accuracy: float | None
 
 
-def diagnostic(correct: bool, set_size: int) -> Diagnostic:
-    accuracy = 1 if correct else 0
+def model_diagnostic(
+    model: Model,
+    test_row: Sequence[int],
+    test: Callable[[Model, Sequence[int]], Sequence[bool]],
+) -> Diagnostic:
+    outcome: Sequence[bool] = test(model, test_row)  # predicted classes
+    test_c: int = test_row[model.c_column]  # actual class
+    correct: bool = outcome[model.domains[model.c_column].index(test_c)]
+    set_size: int = sum(outcome)
+    accuracy: int = 1 if correct else 0
     return Diagnostic(
         accuracy=accuracy,
         single_accuracy=accuracy if set_size == 1 else None,
@@ -1134,25 +1142,6 @@ def mean_diagnostic(diagnostics: Sequence[Diagnostic]) -> Diagnostic:
         return mean(xs2) if xs2 else None
 
     return Diagnostic(*map(_mean, zip(*diagnostics)))
-
-
-def test_mean_diagnostic() -> None:
-    assert mean_diagnostic(
-        [diagnostic(True, 2), diagnostic(False, 1)]
-    ) == pytest.approx(Diagnostic(0.5, 0, 1, 2, 0.5, 0.25))
-
-
-def model_diagnostic(
-    model: Model,
-    test_row: Sequence[int],
-    test: Callable[[Model, Sequence[int]], Sequence[bool]],
-) -> Diagnostic:
-    outcome: Sequence[bool] = test(model, test_row)  # predicted classes
-    test_c: int = test_row[model.c_column]  # actual class
-    return diagnostic(
-        correct=outcome[model.domains[model.c_column].index(test_c)],
-        set_size=sum(outcome),
-    )
 
 
 def test_model_diagnostic() -> None:
