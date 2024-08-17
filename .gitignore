@@ -2,3 +2,4 @@
 /.virtual_documents/
 /*venv*/
 /.idea/
+__pycache__/
