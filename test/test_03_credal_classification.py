@@ -1074,14 +1074,11 @@ def naive_bayes_prob_1(model: Model, test_row: Sequence[int], c: int) -> float:
     n = model.n
     nc = model.nc[c]
     nacs = [model.nac[a_column][test_row[a_column], c] for a_column in model.a_columns]
-    # p(c)=n(c)/N
     pc = nc / n
-    # p(a|c)=(n(a_i,c)+s*t(a_i,c))/(n(c)+s*t(c))
     pacs = [nac / nc for nac in nacs]
     return pc * prod(pacs)
 
 
-# same as naive_bayes_prob_1 but smooth out the zero counts
 def naive_bayes_prob_2(model: Model, test_row: Sequence[int], c: int) -> float:
     tc: float = 1 / len(model.domains[model.c_column])
     tacs: Sequence[float] = [
