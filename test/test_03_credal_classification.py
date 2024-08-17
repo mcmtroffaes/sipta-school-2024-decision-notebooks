@@ -1157,8 +1157,7 @@ def test_model_diagnostic() -> None:
     )
 
 
-def kfcv(
-    # predict(model, test_row) -> sequence of bools (optimal classes)
+def cross_validation_diagnostic(
     predict: Callable[[Model, Sequence[int]], Sequence[bool]],
     folds: int,
     domains: Sequence[Sequence[int]],
@@ -1177,8 +1176,8 @@ def kfcv(
     return mean_diagnostic(diagnostics)
 
 
-def test_kfcv() -> None:
-    assert kfcv(
+def test_cross_validation_diagnostic() -> None:
+    assert cross_validation_diagnostic(
         predict=naive_bayes_predict,
         folds=10,
         domains=cancer_domains,
@@ -1219,7 +1218,7 @@ def naive_credal_predict(model: Model, test_row: Sequence[int]) -> Sequence[bool
 
 
 def test_naive_credal_predict() -> None:
-    assert kfcv(
+    assert cross_validation_diagnostic(
         predict=naive_credal_predict,
         folds=10,
         domains=cancer_domains,
@@ -1270,7 +1269,7 @@ def naive_credal_predict_2(model: Model, test_row: Sequence[int]) -> Sequence[bo
 
 
 def test_naive_credal_predict_2() -> None:
-    assert kfcv(
+    assert cross_validation_diagnostic(
         predict=naive_credal_predict_2,
         folds=10,
         domains=cancer_domains,
@@ -1291,7 +1290,7 @@ def test_naive_credal_predict_2() -> None:
 
 
 def test_naive_credal_predict_3() -> None:
-    assert kfcv(
+    assert cross_validation_diagnostic(
         predict=naive_credal_predict,
         folds=10,
         domains=cancer_domains,
@@ -1299,7 +1298,7 @@ def test_naive_credal_predict_3() -> None:
         c_column=COL_SEVERITY,
         a_columns=[COL_BIRADS, COL_AGE, COL_SHAPE, COL_MARGIN, COL_DENSITY],
     ) == pytest.approx([0.88, 0.8536585365853658, 1, 2, 0.82, 0.79])
-    assert kfcv(
+    assert cross_validation_diagnostic(
         predict=naive_credal_predict_2,
         folds=10,
         domains=cancer_domains,
@@ -1310,7 +1309,7 @@ def test_naive_credal_predict_3() -> None:
 
 
 def test_naive_credal_predict_4() -> None:
-    assert kfcv(
+    assert cross_validation_diagnostic(
         predict=naive_credal_predict,
         folds=10,
         domains=cancer_domains,
@@ -1320,7 +1319,7 @@ def test_naive_credal_predict_4() -> None:
     ) == pytest.approx(
         [0.86, 0.833333333333, 0.871428571428, 4.64285714285, 0.3, 0.3828333333333]
     )
-    assert kfcv(
+    assert cross_validation_diagnostic(
         predict=naive_credal_predict,
         folds=10,
         domains=cancer_domains,
@@ -1330,7 +1329,7 @@ def test_naive_credal_predict_4() -> None:
     ) == pytest.approx(
         [0.815, 0.770491803278, 0.884615384615, 3.85897435897, 0.61, 0.562916666666]
     )
-    assert kfcv(
+    assert cross_validation_diagnostic(
         predict=naive_credal_predict_2,
         folds=10,
         domains=cancer_domains,
