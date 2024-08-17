@@ -1090,9 +1090,7 @@ def naive_bayes_prob_2(model: Model, test_row: Sequence[int], c: int) -> float:
         model.nac[a_column][test_row[a_column], c] + model.s * tac
         for a_column, tac in zip(model.a_columns, tacs)
     ]
-    # p(c)=(n(c)+s*t(c))/(N+s)
     pc = nc / n
-    # p(a|c)=(n(a_i,c)+s*t(a_i,c))/(n(c)+s*t(c))
     pacs = [nac / nc for nac in nacs]
     return pc * prod(pacs)
 
